@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -38,20 +39,22 @@ func parseFlags() *RenameOptions {
 }
 
 func run(args []string, opts *RenameOptions) error {
-    pattern, _, err := validateArgs(args)
+    pattern, files, err := validateArgs(args)
     if err != nil {
         return err
     }
-    oldPattern, _, err := parsePattern(pattern)
+
+    oldPattern, newPattern, err := parsePattern(pattern)
     if err != nil {
         return err
     }
+
     re, err := compilePattern(oldPattern, opts.ignoreCase)
     if err != nil {
         return err
     }
-    fmt.Println("Compiled Regex:", re)
-    return nil
+
+    return processFiles(files, re, newPattern, opts)
 }
 
 func validateArgs(args []string) (pattern string, files []string, err error) {
@@ -82,4 +85,80 @@ func compilePattern(oldPattern string, ignoreCase bool) (*regexp.Regexp, error) 
         oldPattern = "(?i)" + oldPattern
     }
     return regexp.Compile(oldPattern)
+}
+
+func processFiles(files []string, re *regexp.Regexp, newPattern string, opts *RenameOptions) error {
+    for _, glob := range files {
+        matches, err := filepath.Glob(glob)
+        if err != nil {
+            return fmt.Errorf("error processing glob pattern %s: %v", glob, err)
+        }
+
+        for _, path := range matches {
+            if err := processFile(path, re, newPattern, opts); err != nil {
+                fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", path, err)
+                continue
+            }
+        }
+    }
+    return nil
+}
+
+func processFile(path string, re *regexp.Regexp, newPattern string, opts *RenameOptions) error {
+    info, err := os.Stat(path)
+    if err != nil {
+        return err
+    }
+
+    if info.IsDir() {
+        if !opts.recursive {
+            return nil
+        }
+        return processDirectory(path, re, newPattern, opts)
+    }
+
+    return renameFile(path, re, newPattern, opts)
+}
+
+func processDirectory(path string, re *regexp.Regexp, newPattern string, opts *RenameOptions) error {
+    entries, err := os.ReadDir(path)
+    if err != nil {
+        return err
+    }
+
+    for _, entry := range entries {
+        subPath := filepath.Join(path, entry.Name())
+        if err := processFile(subPath, re, newPattern, opts); err != nil {
+            fmt.Fprintf(os.Stderr, "Warning: skipping %s: %v\n", subPath, err)
+        }
+    }
+    return nil
+}
+
+func renameFile(path string, re *regexp.Regexp, newPattern string, opts *RenameOptions) error {
+    dir := filepath.Dir(path)
+    oldName := filepath.Base(path)
+    newName := re.ReplaceAllString(oldName, newPattern)
+
+    if oldName == newName {
+        return nil
+    }
+
+    newPath := filepath.Join(dir, newName)
+
+    if _, err := os.Stat(newPath); err == nil {
+        return fmt.Errorf("target file already exists: %s", newPath)
+    }
+
+    if opts.showChanges || opts.dryRun {
+        fmt.Printf("%s -> %s\n", path, newPath)
+    }
+
+    if !opts.dryRun {
+        if err := os.Rename(path, newPath); err != nil {
+            return fmt.Errorf("failed to rename: %v", err)
+        }
+    }
+
+    return nil
 }
