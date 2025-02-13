@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 )
 
 type RenameOptions struct {
@@ -36,12 +38,19 @@ func parseFlags() *RenameOptions {
 }
 
 func run(args []string, opts *RenameOptions) error {
-    pattern, files, err := validateArgs(args)
+    pattern, _, err := validateArgs(args)
     if err != nil {
         return err
     }
-    fmt.Println("Pattern:", pattern)
-    fmt.Println("Files:", files)
+    oldPattern, _, err := parsePattern(pattern)
+    if err != nil {
+        return err
+    }
+    re, err := compilePattern(oldPattern, opts.ignoreCase)
+    if err != nil {
+        return err
+    }
+    fmt.Println("Compiled Regex:", re)
     return nil
 }
 
@@ -53,4 +62,24 @@ func validateArgs(args []string) (pattern string, files []string, err error) {
         return "", nil, fmt.Errorf("at least one file argument is required")
     }
     return args[0], args[1:], nil
+}
+
+func parsePattern(pattern string) (oldPattern, newPattern string, err error) {
+    if !strings.HasPrefix(pattern, "s/") {
+        return "", "", fmt.Errorf("pattern must start with 's/'")
+    }
+
+    parts := strings.Split(strings.TrimPrefix(pattern, "s/"), "/")
+    if len(parts) < 2 {
+        return "", "", fmt.Errorf("invalid pattern format. Expected: 's/old/new/'")
+    }
+
+    return parts[0], parts[1], nil
+}
+
+func compilePattern(oldPattern string, ignoreCase bool) (*regexp.Regexp, error) {
+    if ignoreCase {
+        oldPattern = "(?i)" + oldPattern
+    }
+    return regexp.Compile(oldPattern)
 }
