@@ -34,6 +34,16 @@ func parseFlags() *RenameOptions {
     flag.BoolVar(&opts.ignoreCase, "i", false, "ignore case in pattern matching")
     flag.BoolVar(&opts.showChanges, "v", false, "verbose - show renamed files")
 
+    flag.Usage = func() {
+        fmt.Fprintf(os.Stderr, "Usage: %s [options] 's/pattern/replacement/' [files...]\n\n", os.Args[0])
+        fmt.Fprintf(os.Stderr, "Options:\n")
+        flag.PrintDefaults()
+        fmt.Fprintf(os.Stderr, "\nExamples:\n")
+        fmt.Fprintf(os.Stderr, "  %s 's/\\.txt$/\\.md/' *.txt\n", os.Args[0])
+        fmt.Fprintf(os.Stderr, "  %s -r 's/test/prod/' ./src/*\n", os.Args[0])
+        fmt.Fprintf(os.Stderr, "  %s -n -v 's/old/new/' file*\n", os.Args[0])
+    }
+
     flag.Parse()
     return opts
 }
