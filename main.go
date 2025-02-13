@@ -77,7 +77,8 @@ func parsePattern(pattern string) (oldPattern, newPattern string, err error) {
         return "", "", fmt.Errorf("invalid pattern format. Expected: 's/old/new/'")
     }
 
-    return parts[0], parts[1], nil
+	newPattern = strings.ReplaceAll(parts[1], "\\.", ".")
+    return parts[0], newPattern, nil
 }
 
 func compilePattern(oldPattern string, ignoreCase bool) (*regexp.Regexp, error) {
